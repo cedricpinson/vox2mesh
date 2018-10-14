@@ -119,6 +119,7 @@ struct Face {
 
 struct VoxelBuffer {
   std::vector<fvec3> vertexes;
+  std::vector<fvec3> normals;
   std::vector<Face> faces;
 };
 
@@ -140,6 +141,10 @@ typedef std::map<ucvec3, VoxelFaceFlags, cmpVoxel> VoxelMapFlags;
 // face 2 z-: 7 6 5 4
 Face FacesVoxel[] = {{7, 6, 2, 3}, {2, 6, 5, 1}, {3, 2, 1, 0},
                      {0, 1, 5, 4}, {7, 3, 0, 4}, {4, 5, 6, 7}};
+
+fvec3 NormalFace[] = {{1, 0, 0},  {0, 1, 0},  {0, 0, 1},
+                      {-1, 0, 0}, {0, -1, 0}, {0, 0, -1}};
+
 fvec3 VertexesVoxel[] = {
     {-0.5, -0.5, 0.5},  {-0.5, 0.5, 0.5},  {0.5, 0.5, 0.5},  {0.5, -0.5, 0.5},
     {-0.5, -0.5, -0.5}, {-0.5, 0.5, -0.5}, {0.5, 0.5, -0.5}, {0.5, -0.5, -0.5}};
@@ -182,15 +187,31 @@ int writeOBJ(const VoxelGroup &group, const char *path) {
   vertexesOffset.push_back(0);
   int totalFaces = 0;
 
+  bool hasNormal = false;
+
   for (VoxelGroup::const_iterator it = group.begin(); it != group.end(); it++) {
     const std::vector<fvec3> &vertexes = it->second.vertexes;
     const std::vector<Face> &faces = it->second.faces;
+    if (it->second.normals.size())
+      hasNormal = true;
     for (int i = 0; i < vertexes.size(); i++) {
       fprintf(fp, "v %f %f %f\n", vertexes[i][0], vertexes[i][1],
               vertexes[i][2]);
     }
+
     vertexesOffset.push_back(vertexes.size());
     totalFaces += faces.size();
+  }
+
+  if (hasNormal) {
+    for (VoxelGroup::const_iterator it = group.begin(); it != group.end();
+         it++) {
+      const std::vector<fvec3> &normals = it->second.normals;
+      for (int i = 0; i < normals.size(); i++) {
+        fprintf(fp, "vn %f %f %f\n", normals[i][0], normals[i][1],
+                normals[i][2]);
+      }
+    }
   }
 
   int indexGroup = 0;
@@ -200,10 +221,22 @@ int writeOBJ(const VoxelGroup &group, const char *path) {
 
     const std::vector<Face> &faces = it->second.faces;
     fprintf(fp, "g material_%d\n", indexGroup);
-    for (int i = 0; i < faces.size(); i++) {
-      fprintf(fp, "f %d %d %d %d\n", vertexOffset + faces[i][0],
-              vertexOffset + faces[i][1], vertexOffset + faces[i][2],
-              vertexOffset + faces[i][3]);
+
+    if (hasNormal) {
+      for (int i = 0; i < faces.size(); i++) {
+        int v0 = vertexOffset + faces[i][0];
+        int v1 = vertexOffset + faces[i][1];
+        int v2 = vertexOffset + faces[i][2];
+        int v3 = vertexOffset + faces[i][3];
+        fprintf(fp, "f %d//%d %d//%d %d//%d %d//%d\n", v0, v0, v1, v1, v2, v2,
+                v3, v3);
+      }
+    } else {
+      for (int i = 0; i < faces.size(); i++) {
+        fprintf(fp, "f %d %d %d %d\n", vertexOffset + faces[i][0],
+                vertexOffset + faces[i][1], vertexOffset + faces[i][2],
+                vertexOffset + faces[i][3]);
+      }
     }
     indexGroup++;
   }
@@ -252,7 +285,7 @@ void polygonize(VoxelScene &scene, const VoxelList &voxelList) {
 
   VoxelMap voxelMap;
   VoxelMapFlags voxelMapFlags;
-  VoxelGroup& voxelGroup = scene.voxelGroup;
+  VoxelGroup &voxelGroup = scene.voxelGroup;
 
   // fill the map
   for (const VoxelData &voxelData : voxelList) {
@@ -311,40 +344,42 @@ void polygonize(VoxelScene &scene, const VoxelList &voxelList) {
 
     VoxelBuffer &voxelBuffer = voxelGroup[materialID];
     std::vector<fvec3> &vertexes = voxelBuffer.vertexes;
+    std::vector<fvec3> &normals = voxelBuffer.normals;
     std::vector<Face> &faces = voxelBuffer.faces;
 
     fvec3 voxelPosition((float)position[0], (float)position[1],
                         (float)position[2]);
 
-    int vertexBaseIndex = vertexes.size();
-    // computes all vertex cube in world space
-    // TODO: clean vertexes not used
-    for (int j = 0; j < 8; j++) {
-      fvec3 v = VertexesVoxel[j];
-      v += voxelPosition;
-      vertexes.push_back(v);
-      nbVertexes++;
-    }
-
     // insert all faces
     for (int f = 0; f < 6; f++) {
       if ((1 << f) & faceFlags) {
         Face face = FacesVoxel[f];
-        face += vertexBaseIndex;
-        faces.push_back(face);
+
+        int vertexBaseIndex = vertexes.size();
+        fvec3 normal = NormalFace[f];
+
+        for (int j = 0; j < 4; j++) {
+          fvec3 v = VertexesVoxel[face[j]];
+          v += voxelPosition;
+          vertexes.push_back(v);
+          normals.push_back(normal);
+        }
+
+        Face f(0, 1, 2, 3);
+        f += vertexBaseIndex;
+        faces.push_back(f);
         nbFaces++;
       }
     }
   }
-  printf("Voxels %d - Faces %d - Vertexes %d\n", (int)voxelMapFlags.size(),
-         nbFaces, nbVertexes);
+  printf("Faces %d - Vertexes %d\n", nbFaces, nbFaces * 4);
 }
 
 void clean(VoxelScene &scene, const VoxelList &voxelList) {
 
   VoxelMap voxelMap;
   VoxelMapFlags voxelMapFlags;
-  VoxelGroup& voxelGroup = scene.voxelGroup;
+  VoxelGroup &voxelGroup = scene.voxelGroup;
 
   // fill the map
   for (const VoxelData &voxelData : voxelList) {
@@ -408,7 +443,7 @@ void clean(VoxelScene &scene, const VoxelList &voxelList) {
 }
 
 void createBruteForce(VoxelScene &scene, const VoxelList &voxelList) {
-  VoxelGroup& voxelGroup = scene.voxelGroup;
+  VoxelGroup &voxelGroup = scene.voxelGroup;
   for (int i = 0; i < voxelList.size(); i++) {
     const VoxelData &voxel = voxelList[i];
 
