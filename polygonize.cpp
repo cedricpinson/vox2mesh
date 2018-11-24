@@ -10,7 +10,7 @@ struct VoxelData {
     {}
     VoxelData() {}
     inline uint8_t& operator[](int index) { return v[index]; }
-    inline const uint8_t operator[](int index) const { return v[index]; }
+    inline uint8_t operator[](int index) const { return v[index]; }
 };
 
 struct cmpVoxel {
@@ -116,7 +116,6 @@ void polygonize(VoxelGroup& voxelGroup, const VoxModel& voxModel)
             }
 
     int nbFaces = 0;
-    int nbVertexes = 0;
     for (VoxelMapFlags::iterator it = voxelMapFlags.begin(); it != voxelMapFlags.end(); it++) {
         ucvec3 position = it->first;
         MaterialID materialID = voxelMap[position];
@@ -210,7 +209,7 @@ int writeOBJ(const VoxelGroup& group, const char* path)
         const std::vector<Face>& faces = it->second.faces;
         if (it->second.normals.size())
             hasNormal = true;
-        for (int i = 0; i < vertexes.size(); i++) {
+        for (unsigned int i = 0; i < vertexes.size(); i++) {
             fprintf(fp, "v %f %f %f\n", vertexes[i][0], vertexes[i][1], vertexes[i][2]);
         }
 
@@ -221,7 +220,7 @@ int writeOBJ(const VoxelGroup& group, const char* path)
     if (hasNormal) {
         for (VoxelGroup::const_iterator it = group.begin(); it != group.end(); it++) {
             const std::vector<fvec3>& normals = it->second.normals;
-            for (int i = 0; i < normals.size(); i++) {
+            for (unsigned int i = 0; i < normals.size(); i++) {
                 fprintf(fp, "vn %f %f %f\n", normals[i][0], normals[i][1], normals[i][2]);
             }
         }
@@ -236,7 +235,7 @@ int writeOBJ(const VoxelGroup& group, const char* path)
         fprintf(fp, "g material_%d\n", indexGroup);
 
         if (hasNormal) {
-            for (int i = 0; i < faces.size(); i++) {
+            for (unsigned int i = 0; i < faces.size(); i++) {
                 int v0 = vertexOffset + faces[i][0];
                 int v1 = vertexOffset + faces[i][1];
                 int v2 = vertexOffset + faces[i][2];
@@ -244,7 +243,7 @@ int writeOBJ(const VoxelGroup& group, const char* path)
                 fprintf(fp, "f %d//%d %d//%d %d//%d %d//%d\n", v0, v0, v1, v1, v2, v2, v3, v3);
             }
         } else {
-            for (int i = 0; i < faces.size(); i++) {
+            for (unsigned int i = 0; i < faces.size(); i++) {
                 fprintf(fp, "f %d %d %d %d\n", vertexOffset + faces[i][0], vertexOffset + faces[i][1],
                         vertexOffset + faces[i][2], vertexOffset + faces[i][3]);
             }
