@@ -214,63 +214,43 @@ bool VoxReader::loadVoxelsData(const uint8_t* bytes,
     return true;
 }
 
-void VoxReader::parseRotation(const std::bitset<7>& bitset, float* values)
+static void decodeRotation(const uint8_t rotation, float* values)
 {
-    float signed1 = bitset.test(4) ? -1 : 1;
-    float signed2 = bitset.test(5) ? -1 : 1;
-    float signed3 = bitset.test(6) ? -1 : 1;
+    values[0] = values[1] = values[2] = values[3] = values[4] = values[5] = values[6] = values[7] = values[8] = 0.0f;
 
-    values[0] = bitset.test(0) ? 0 : signed1;
-    values[1] = bitset.test(0) && !bitset.test(1) ? signed1 : 0;
-    values[2] = values[0] == values[1] ? signed1 : 0;
+    float signed1 = rotation & (1 << 4) ? -1 : 1;
+    float signed2 = rotation & (1 << 5) ? -1 : 1;
+    float signed3 = rotation & (1 << 6) ? -1 : 1;
 
-    values[3] = bitset.test(2) ? 0 : signed2;
-    values[4] = bitset.test(2) && !bitset.test(3) ? signed2 : 0;
-    values[5] = values[2] == values[1] ? signed2 : 0;
+    int index1 = rotation & 3;
+    int index2 = (rotation >> 2) & 3;
+    int index3 = 0;
 
-    values[7] = values[0] == values[3] ? signed3 : 0;
-    values[7] = values[1] == values[4] ? signed3 : 0;
-    values[7] = values[2] == values[5] ? signed3 : 0;
-
-    printf("ROTATION\n");
-    for (int i = 0; i < 3; ++i) {
-        printf("%f %f %f\n", values[i], values[i + 1], values[1 + 2]);
-    }
-}
-
-float* VoxReader::decodeRotation(const uint8_t rotation, float* values)
-{
-    std::bitset<7> bitset;
-    bitset.reset();
-
-    for (int i = 0; i < 7; ++i) {
-        if (rotation & (1 << i))
-            bitset.set(i);
+    if (index1 == 0 || index2 == 0) {
+        index3 = 1;
+        if (index2 == 1 || index2 == 1)
+            index3 = 2;
     }
 
-    parseRotation(bitset, values);
-    return values;
+    values[index1] = signed1;
+    values[3 + index2] = signed2;
+    values[6 + index3] = signed3;
 }
 
-int VoxReader::decodeInt(const uint8_t* content, int& currentPos)
+uint32_t VoxReader::decodeInt(const uint8_t* content, int& currentPos)
 {
-    uint32_t value = *(const uint32_t*)(content + currentPos);
+    uint32_t value;
+    memcpy(&value, &content[currentPos], 4);
     currentPos += 4;
-
-    return static_cast<int>(value);
+    return value;
 }
 
 std::string VoxReader::decodeString(const uint8_t* content, int& currentPos)
 {
-    uint32_t stringSize = content[currentPos];
-    currentPos += 4;
-
-    char value[stringSize + 1];
-    memcpy(&value, &content[currentPos], stringSize);
-    value[stringSize] = 0;
-
-    std::string strVal(value);
-    currentPos += stringSize;
+    uint32_t size;
+    memcpy(&size, &content[currentPos], 4);
+    std::string strVal((char*)&content[currentPos + 4], size);
+    currentPos += 4 + size;
     return strVal;
 }
 
@@ -463,17 +443,10 @@ void VoxReader::decodeShape(const uint8_t* content)
 
 bool VoxReader::decodePosChunk(const uint8_t* content)
 {
-    uint32_t nbVoxels = *(uint32_t*)content;
-    VoxModel voxels;
-    for (uint32_t i = 0; i < nbVoxels; ++i) {
-        VoxelPos voxel;
-        voxel[0] = content[4 + i * 4 + 0];
-        voxel[1] = content[4 + i * 4 + 1];
-        voxel[2] = content[4 + i * 4 + 2];
-        voxel[3] = content[4 + i * 4 + 3];
-        voxels.push_back(voxel);
-    }
-
+    uint32_t nbVoxels;
+    memcpy(&nbVoxels, content, sizeof(uint32_t));
+    VoxModel voxels(nbVoxels);
+    memcpy(&voxels[0], content + 4, 4 * nbVoxels);
     printf("%lu voxels\n", voxels.size());
     _voxScene.voxels.push_back(voxels);
     return true;
@@ -482,14 +455,9 @@ bool VoxReader::decodePosChunk(const uint8_t* content)
 bool VoxReader::decodePaletteChunk(const uint8_t* content, unsigned int size)
 {
     VoxPalette palette;
-    palette.reserve(256);
+    palette.reserve(size + 1);
     palette.push_back(0);
-    int currentPos = 0;
-    for (unsigned int i = 0; i < size; ++i) {
-        int colorRGBA = decodeInt(content, currentPos);
-        palette.push_back(colorRGBA);
-    }
-
+    memcpy(&palette[1], content, size * 4);
     _voxScene.palettes.push_back(palette);
     return true;
 }

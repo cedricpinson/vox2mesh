@@ -36,7 +36,7 @@ struct VoxShape {
 
 struct VoxTransform {
     struct Frame {
-        std::vector<float> rotation = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+        float rotation[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
         int translation[3] = {0, 0, 0};
     };
 
@@ -127,9 +127,7 @@ class VoxReader {
     bool decodeSizeChunk(const uint8_t* content);
 
     bool loadVoxelsData(const uint8_t* bytes, size_t size);
-    void parseRotation(const std::bitset<7>& bitset, float* values);
-    float* decodeRotation(const uint8_t rotation, float* values);
-    int decodeInt(const uint8_t* content, int& currentPos);
+    uint32_t decodeInt(const uint8_t* content, int& currentPos);
     std::string decodeString(const uint8_t* content, int& currentPos);
     void decodeTransform(const uint8_t* content);
     void decodeGroup(const uint8_t* content);
